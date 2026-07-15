@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#059669" />
+  <title>SPIN 銷售實戰模擬</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { animation: { 'fade-in': 'fadeIn .25s ease-out' }, keyframes: { fadeIn: { '0%': { opacity: 0, transform: 'translateY(4px)' }, '100%': { opacity: 1, transform: 'translateY(0)' } } } } }
+    };
+  </script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+  <style>
+    body{margin:0;background:#f8fafc}.line-clamp-1{display:-webkit-box;-webkit-line-clamp:1;-webkit-box-orient:vertical;overflow:hidden}.line-clamp-2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useEffect,useMemo,useState}=React;
+
+/* =========================================================
+   只需要修改這裡：Firebase 專案設定
+   Firebase Console → Project settings → Your apps → Web app
+   ========================================================= */
+const firebaseConfig = {
+  apiKey: "請貼上你的 apiKey",
+  authDomain: "請貼上你的 authDomain",
+  projectId: "請貼上你的 projectId",
+  storageBucket: "請貼上你的 storageBucket",
+  messagingSenderId: "請貼上你的 messagingSenderId",
+  appId: "請貼上你的 appId"
+};
+
+const APP_ID = "spin-workshop-app";
+const COLLECTION_PATH = `artifacts/${APP_ID}/public/data/spin_submissions`;
+const ADMIN_PASSWORD = "spin888";
+
+let auth=null,db=null,firebaseReady=false;
+try{
+  if(!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+  auth=firebase.auth(); db=firebase.firestore(); firebaseReady=!firebaseConfig.apiKey.includes("請貼上");
+}catch(err){console.error("Firebase 初始化失敗",err)}
+
+const Icon=({name,className="w-5 h-5"})=>{
+ const paths={
+  book:'M4 19.5A2.5 2.5 0 0 1 6.5 17H20V5H6.5A2.5 2.5 0 0 0 4 7.5v12ZM8 7h8M8 11h8',
+  user:'M20 21a8 8 0 0 0-16 0M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z',
+  monitor:'M2 3h20v14H2zM8 21h8M12 17v4',
+  send:'m22 2-7 20-4-9-9-4 20-7ZM22 2 11 13',
+  users:'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
+  download:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3',
+  trash:'M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v5M14 11v5',
+  check:'M20 6 9 17l-5-5',
+  grid:'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',
+  max:'M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5',
+  x:'M18 6 6 18M6 6l12 12',
+  help:'M9.09 9a3 3 0 1 1 5.83 1c0 2-3 2-3 4M12 18h.01',
+  alert:'M10.3 2.7 1.8 17a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3l-8.5-14.3a2 2 0 0 0-3.4 0ZM12 9v4M12 17h.01',
+  right:'m9 18 6-6-6-6', spark:'m12 3-1.9 5.1L5 10l5.1 1.9L12 17l1.9-5.1L19 10l-5.1-1.9L12 3Z'
+ };
+ return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d={paths[name]||paths.spark}/></svg>
+};
+
+const SCENARIOS=[
+{id:'cust-1',title:'學生／數位筆記',product:'iPad Air',customerName:'王同學｜大學二年級',emoji:'🎓',theme:'emerald',context:'每天上課都帶很多講義，還要做筆記、整理報告，期中期末常常找不到資料。最近看到同學都用 iPad 做筆記，有點心動，但不知道是不是真的適合自己。',tip:'（提示：不要主動提到 Apple Pencil，看銷售如何引導問出。）'},
+{id:'cust-2',title:'家長／親子學習',product:'iPad',customerName:'陳小姐｜35歲｜兩個孩子的媽媽',emoji:'🏠',theme:'blue',context:'家裡只有一台共用電腦，小朋友最近開始需要查資料、上英文課，也很喜歡畫畫。現在常常輪流使用設備，有時候還要跟爸媽搶電腦。',tip:'（提示：引導客戶思考多部裝置的協同效應與專屬學習空間。）'},
+{id:'cust-3',title:'業務／外勤工作',product:'iPad mini',customerName:'林先生｜32歲｜保險業務',emoji:'💼',theme:'indigo',context:'每天都要拜訪客戶，目前都是帶筆電出去簡報，回公司再整理會議內容。覺得筆電有點重，而且有時只是修改文件、簽名或展示資料。',tip:'（提示：聚焦於羽量級的可攜性與即時簽名的便利性。）'},
+{id:'cust-4',title:'創作者／內容製作',product:'iPad Pro',customerName:'張先生｜28歲｜自由接案創作者',emoji:'🎨',theme:'purple',context:'平常會拍 Reels、剪短影片、修照片，也會畫一些社群貼文素材。現在使用舊平板已經四、五年，常常遇到容量不足、速度變慢，工作效率受到影響。',tip:'（提示：突顯極致效能 M 系列晶片與高刷新率螢幕對工作流的解放。）'}];
+
+function App(){
+ const [view,setView]=useState('role-select'),[user,setUser]=useState(null),[status,setStatus]=useState('連線驗證中');
+ const [studentName,setStudentName]=useState(''),[scenarioId,setScenarioId]=useState('cust-1'),[spin,setSpin]=useState({S:'',P:'',I:'',N:''});
+ const [submitted,setSubmitted]=useState(false),[submitting,setSubmitting]=useState(false),[message,setMessage]=useState('');
+ const [submissions,setSubmissions]=useState([]),[selected,setSelected]=useState(null),[password,setPassword]=useState(''),[adminError,setAdminError]=useState(''),[deleteModal,setDeleteModal]=useState(null);
+ const scenario=useMemo(()=>SCENARIOS.find(s=>s.id===scenarioId),[scenarioId]);
+
+ useEffect(()=>{
+  if(!firebaseReady){setStatus('尚未設定 Firebase');return;}
+  auth.signInAnonymously().catch(e=>{console.error(e);setStatus('Firebase 驗證失敗')});
+  return auth.onAuthStateChanged(u=>{setUser(u);setStatus(u?'雲端即時同步':'連線驗證中')});
+ },[]);
+ useEffect(()=>{
+  if(!user||!db)return;
+  return db.collection(COLLECTION_PATH).onSnapshot(snap=>{
+   const rows=snap.docs.map(d=>({id:d.id,...d.data()}));
+   rows.sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)); setSubmissions(rows);
+  },e=>{console.error(e);setStatus('資料同步失敗')});
+ },[user]);
+
+ const submit=async e=>{e.preventDefault();if(!user){setMessage('Firebase 尚未連線，請先完成設定或稍後重試。');return}if(!studentName.trim()){setMessage('請輸入您的姓名');return}
+  setSubmitting(true);setMessage('');try{await db.collection(COLLECTION_PATH).doc(user.uid).set({studentName:studentName.trim(),modelType:scenario.product,customerScenario:`${scenario.customerName} - ${scenario.context}`,selectedScenarioId:scenarioId,spin,createdAt:firebase.firestore.FieldValue.serverTimestamp(),updatedAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});setSubmitted(true)}catch(e){console.error(e);setMessage('送出失敗，請檢查 Firebase 設定、規則與網路連線。')}finally{setSubmitting(false)}};
+ const adminLogin=e=>{e.preventDefault();if(password===ADMIN_PASSWORD){setAdminError('');setView('admin-dashboard')}else setAdminError('密碼錯誤！請輸入正確的講師密碼')};
+ const removeOne=async()=>{try{await db.collection(COLLECTION_PATH).doc(deleteModal.data.id).delete();if(selected?.id===deleteModal.data.id)setSelected(null)}finally{setDeleteModal(null)}};
+ const removeAll=async()=>{try{const batch=db.batch();submissions.forEach(s=>batch.delete(db.collection(COLLECTION_PATH).doc(s.id)));await batch.commit();setSelected(null)}finally{setDeleteModal(null)}};
+ const exportCSV=()=>{const q=v=>`"${String(v??'').replace(/"/g,'""')}"`;let csv='\uFEFF時間,學員姓名,應對機型,客戶情境,S(情境),P(探索/痛點),I(暗示/影響),N(需求效益)\n';submissions.forEach(s=>{const date=s.createdAt?.seconds?new Date(s.createdAt.seconds*1000).toLocaleString('zh-TW'):'無時間';csv+=[date,s.studentName,s.modelType,s.customerScenario,s.spin?.S,s.spin?.P,s.spin?.I,s.spin?.N].map(q).join(',')+'\n'});const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download=`SPIN_Workshop_Submissions_${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(a.href)};
+
+ const SpinRow=({letter,title,en,help})=><div className="grid grid-cols-1 md:grid-cols-12 border-b last:border-b-0 border-slate-200"><div className="md:col-span-3 bg-slate-50/60 p-4 flex flex-col justify-center items-center text-center md:border-r border-slate-200"><b className="text-4xl font-serif text-slate-950">{letter}</b><b className="text-sm mt-1">{title}</b><span className="text-[10px] text-slate-400 mt-1">{en}</span></div><div className="md:col-span-9 p-5 space-y-2"><div className="bg-slate-100/80 text-xs text-slate-600 px-3 py-2 rounded-lg flex gap-2"><Icon name="help" className="w-3.5 h-3.5 shrink-0"/><span>{help}</span></div><textarea rows="3" required value={spin[letter]} onChange={e=>setSpin({...spin,[letter]:e.target.value})} placeholder={`請輸入針對此情境的${title}...`} className="w-full text-sm p-3 border border-slate-300 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none resize-y"/></div></div>;
+
+ return <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col">
+  <header className="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm"><div className="max-w-7xl mx-auto px-4 py-4 flex flex-col sm:flex-row justify-between items-center gap-4"><div className="flex items-center gap-3"><div className="bg-emerald-600 text-white p-2 rounded-xl shadow-md"><Icon name="book" className="w-6 h-6"/></div><div><h1 className="text-xl font-bold text-slate-900">SPIN 銷售實戰模擬</h1><p className="text-xs text-slate-500 font-medium">Apple iPad 銷售情境演練看板</p></div></div><div className="flex items-center gap-2">{view!=='role-select'&&<button onClick={()=>{setView('role-select');setSubmitted(false)}} className="text-xs font-bold px-4 py-2 rounded-xl bg-slate-100 border">← 返回角色選擇</button>}<div className={`${firebaseReady?'bg-emerald-50 text-emerald-700':'bg-amber-50 text-amber-700'} px-3 py-1.5 rounded-full text-xs font-bold flex items-center gap-1.5`}><span className={`w-2 h-2 rounded-full ${firebaseReady?'bg-emerald-500 animate-pulse':'bg-amber-500'}`}></span>{status}</div></div></div></header>
+  <main className="flex-1 flex flex-col">
+   {view==='role-select'&&<div className="flex-1 flex items-center justify-center p-6 bg-gradient-to-b from-slate-50 to-slate-100 animate-fade-in"><div className="max-w-4xl w-full grid md:grid-cols-2 gap-8 my-8">
+    <div onClick={()=>setView('student-form')} className="group relative bg-white border rounded-2xl p-8 shadow-xl hover:shadow-2xl hover:border-emerald-400 cursor-pointer transition transform hover:-translate-y-1 overflow-hidden"><div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-full -mr-10 -mt-10"/><div className="relative"><div className="bg-emerald-100 text-emerald-700 w-14 h-14 rounded-2xl flex items-center justify-center mb-6"><Icon name="user" className="w-8 h-8"/></div><h2 className="text-2xl font-extrabold text-slate-900 mb-2">我是學員</h2><p className="text-slate-500 text-sm leading-relaxed mb-6">一鍵選擇抽中情境、隨時對照客戶背景，快速設計出屬於您的 SPIN 精準提問。</p></div><div className="relative flex items-center text-emerald-600 font-bold text-sm">進入填寫 SPIN 模擬 <Icon name="right" className="w-4 h-4 ml-1"/></div></div>
+    <div className="group relative bg-white border rounded-2xl p-8 shadow-xl hover:shadow-2xl hover:border-blue-400 transition transform hover:-translate-y-1 overflow-hidden"><div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full -mr-10 -mt-10"/><div className="relative"><div className="bg-blue-100 text-blue-700 w-14 h-14 rounded-2xl flex items-center justify-center mb-6"><Icon name="monitor" className="w-8 h-8"/></div><h2 className="text-2xl font-extrabold text-slate-900 mb-2">我是講師（後台投影）</h2><p className="text-slate-500 text-sm leading-relaxed mb-4">即時查看全體學員提交的銷售提問卡片、投影放大討論與一鍵清空功能。</p><form onSubmit={adminLogin} className="mt-4 space-y-2"><label className="block text-xs font-bold text-slate-500">講師進入密碼</label><div className="flex gap-2"><input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="請輸入管理員密碼" className="flex-1 min-w-0 text-sm px-3 py-2 border rounded-lg bg-slate-50"/><button className="bg-blue-600 text-white text-sm font-semibold px-4 py-2 rounded-lg">驗證</button></div>{adminError&&<p className="text-red-500 text-xs font-semibold">{adminError}</p>}</form></div></div>
+   </div></div>}
+
+   {view==='student-form'&&<div className="max-w-4xl w-full mx-auto p-4 sm:p-6 my-4 animate-fade-in">{submitted?<div className="bg-white rounded-2xl border p-8 text-center shadow-xl max-w-lg mx-auto my-12"><div className="bg-emerald-100 text-emerald-600 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"><Icon name="check" className="w-12 h-12"/></div><h3 className="text-2xl font-bold text-slate-900 mb-3">您的 SPIN 提問已成功提交！</h3><p className="text-slate-600 mb-6">講師已可在投影大螢幕看到您的卡片。需要修正時，可重新修改並再次提交。</p><button onClick={()=>setSubmitted(false)} className="bg-emerald-600 text-white font-bold py-2.5 px-6 rounded-xl">重新修改此內容</button></div>:
+    <form onSubmit={submit} className="space-y-6">
+     <section className="bg-white rounded-2xl border p-6 shadow-md space-y-4"><h3 className="text-lg font-bold flex items-center gap-2 pb-3 border-b"><span className="bg-emerald-600 text-white w-6 h-6 rounded-full grid place-items-center text-xs">1</span>您的基本資料</h3><label className="block text-sm font-bold">您的姓名 <span className="text-red-500">*</span></label><input required value={studentName} onChange={e=>setStudentName(e.target.value)} placeholder="請輸入組別或學員姓名" className="w-full text-sm px-3.5 py-2.5 border rounded-xl bg-slate-50/50"/></section>
+     <section className="bg-white rounded-2xl border p-6 shadow-md space-y-4"><h3 className="text-lg font-bold flex items-center gap-2 pb-3 border-b"><span className="bg-emerald-600 text-white w-6 h-6 rounded-full grid place-items-center text-xs">2</span>選擇演練客戶情境（共 4 款，點選即切換）</h3><div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">{SCENARIOS.map(sc=><button type="button" key={sc.id} onClick={()=>setScenarioId(sc.id)} className={`relative text-left p-4 rounded-xl border-2 transition flex items-center gap-3 ${scenarioId===sc.id?'bg-emerald-50 border-emerald-500 shadow-md':'bg-white border-slate-200 hover:bg-slate-50'}`}><span className="text-xl">{sc.emoji}</span><span><small className="block text-[10px] text-slate-400 font-bold">應對裝置：{sc.product}</small><b className="text-sm">{sc.title}</b></span>{scenarioId===sc.id&&<span className="absolute top-0 right-0 bg-emerald-500 text-white px-2 py-1 rounded-bl-lg">✓</span>}</button>)}</div><div className="bg-slate-900 text-white rounded-xl p-5 space-y-3"><div className="flex flex-wrap justify-between gap-2 pb-2.5 border-b border-slate-800"><div><span className="bg-emerald-500 text-slate-900 text-xs font-black px-2.5 py-1 rounded-md">{scenario.product}</span><span className="text-sm font-bold text-slate-300 ml-2">應對對象：{scenario.customerName}</span></div><span className="text-xs text-slate-400">目前對照情境看板</span></div><p className="text-slate-200 text-sm leading-relaxed">{scenario.context}</p><div className="bg-amber-950/40 text-amber-300 text-xs border border-amber-900/40 p-2.5 rounded-lg flex gap-2"><Icon name="spark" className="w-3.5 h-3.5 shrink-0"/>{scenario.tip}</div></div></section>
+     <section className="bg-white rounded-2xl border shadow-lg overflow-hidden"><div className="bg-slate-950 text-white p-5 flex justify-between items-center"><div><h3 className="text-lg font-bold flex items-center gap-2"><span className="bg-emerald-500 text-slate-900 w-6 h-6 rounded-full grid place-items-center text-xs">3</span>SPIN 銷售提問設計</h3><p className="text-xs text-slate-400 mt-1">請為「{scenario.customerName.split('｜')[0]}」客製化銷售提問流程</p></div><span className="text-xs bg-slate-900 text-slate-400 px-3 py-1 rounded-full border border-slate-800">SPIN Framework</span></div><SpinRow letter="S" title="情境式問題" en="Situation Questions" help="迅速掌握客戶背景及產品應用情境，為後續談話鋪路。"/><SpinRow letter="P" title="探索型問題" en="Problem Questions" help="發掘客戶現有產品可能的痛點或未被滿足的需求。"/><SpinRow letter="I" title="暗示型問題" en="Implication Questions" help="幫客戶理解問題持續而未解決可能造成的負面影響與連帶損失。"/><SpinRow letter="N" title="需求效益問題" en="Need-payoff Questions" help="積極正面的提問，鼓勵顧客說出解決問題後的具體好處與效益。"/></section>
+     {message&&<p className="text-red-600 text-sm font-semibold text-center bg-red-50 py-2 rounded-xl border border-red-200">⚠️ {message}</p>}<div className="flex justify-end"><button disabled={submitting} className="w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold py-3.5 px-10 rounded-xl shadow-lg flex items-center justify-center gap-2 disabled:opacity-50">{submitting?'正在送出中...':'送出我的 SPIN 提案'}<Icon name="send" className="w-4 h-4"/></button></div>
+    </form>}</div>}
+
+   {view==='admin-dashboard'&&<div className="flex-1 p-4 sm:p-6 bg-slate-100 animate-fade-in"><div className="bg-white rounded-2xl border p-4 sm:p-6 shadow-md mb-6 flex flex-col md:flex-row justify-between gap-4"><div><div className="flex items-center gap-2"><h2 className="text-xl font-extrabold">學員實戰動態看板</h2><span className="bg-blue-100 text-blue-800 text-xs px-2.5 py-0.5 rounded-full font-bold flex gap-1"><Icon name="users" className="w-3.5 h-3.5"/>{submissions.length} 人已填寫</span></div><p className="text-xs text-slate-500 mt-1">點擊學員卡片可放大全螢幕投影討論</p></div><div className="flex gap-2"><button onClick={exportCSV} disabled={!submissions.length} className="flex items-center gap-1.5 bg-slate-900 text-white text-xs font-bold py-2.5 px-4 rounded-xl disabled:opacity-40"><Icon name="download" className="w-4 h-4"/>匯出 Excel/CSV</button><button onClick={()=>setDeleteModal({type:'all'})} disabled={!submissions.length} className="flex items-center gap-1.5 bg-red-600 text-white text-xs font-bold py-2.5 px-4 rounded-xl disabled:opacity-40"><Icon name="trash" className="w-4 h-4"/>全部刪除</button></div></div>
+    {!submissions.length?<div className="flex flex-col items-center justify-center bg-white border border-dashed rounded-3xl p-12 text-center min-h-[360px]"><div className="w-20 h-20 bg-slate-100 rounded-full grid place-items-center text-slate-400 mb-4"><Icon name="grid" className="w-10 h-10"/></div><h4 className="text-lg font-bold">等待學員提交中...</h4><p className="text-slate-400 text-xs mt-1">請引導學員選擇情境，並設計 SPIN 模擬問卷送出。</p></div>:<div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">{submissions.map(item=><article key={item.id} onClick={()=>setSelected(item)} className="bg-white rounded-2xl border shadow-md hover:shadow-xl cursor-pointer overflow-hidden"><div className="bg-slate-950 p-4 text-white flex justify-between"><div><div className="font-extrabold flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-emerald-400"/>{item.studentName}</div><div className="text-[10px] text-slate-400 mt-1">對應設備：<b className="text-white">{item.modelType}</b></div></div><div className="flex gap-1.5" onClick={e=>e.stopPropagation()}><button onClick={()=>setSelected(item)} className="p-1.5 bg-slate-800 rounded-lg"><Icon name="max" className="w-3.5 h-3.5"/></button><button onClick={()=>setDeleteModal({type:'single',data:item})} className="p-1.5 bg-red-950 text-red-300 rounded-lg"><Icon name="trash" className="w-3.5 h-3.5"/></button></div></div><div className="px-4 py-2.5 bg-slate-100/60 border-b"><p className="text-[10px] font-black text-slate-400">應對情境</p><p className="text-xs font-semibold line-clamp-1">{item.customerScenario}</p></div><div className="p-4 space-y-2.5">{['S','P','I','N'].map(k=><div className="flex gap-2" key={k}><span className="shrink-0 w-5 h-5 rounded bg-slate-100 font-serif font-black text-xs grid place-items-center border">{k}</span><p className="text-xs text-slate-600 line-clamp-2">{item.spin?.[k]||'尚未填寫'}</p></div>)}</div><div className="bg-slate-50 px-4 py-2 text-right text-[10px] text-slate-400">點擊卡片放大分享</div></article>)}</div>}</div>}
+  </main>
+
+  {selected&&<div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-sm flex items-center justify-center p-4"><div className="bg-white w-full max-w-5xl rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col"><div className="bg-slate-900 text-white p-6 flex justify-between"><div><span className="text-xs font-bold text-emerald-400 bg-emerald-950 px-2.5 py-1 rounded-md">即時焦點分享</span><h3 className="text-2xl font-black mt-2">{selected.studentName}<span className="text-slate-400 text-base font-normal"> 的 SPIN 銷售提問設計</span></h3></div><button onClick={()=>setSelected(null)} className="bg-slate-800 p-2 rounded-xl"><Icon name="x" className="w-6 h-6"/></button></div><div className="bg-slate-950 p-6 grid md:grid-cols-2 gap-4 text-white"><div className="bg-slate-900 p-4 rounded-xl border border-slate-800"><small className="text-slate-400 font-bold">銷售機型（Model）</small><p className="text-lg font-extrabold text-emerald-400 mt-1">{selected.modelType}</p></div><div className="bg-slate-900 p-4 rounded-xl border border-slate-800"><small className="text-slate-400 font-bold">對照客戶背景情境（Scenario）</small><p className="text-sm font-semibold mt-1 line-clamp-2">{selected.customerScenario}</p></div></div><div className="overflow-y-auto p-6 grid md:grid-cols-2 gap-4">{[['S','情境式問題'],['P','探索型問題'],['I','暗示型問題'],['N','需求效益問題']].map(([k,t])=><div key={k} className="border rounded-2xl p-5 shadow-sm"><div className="flex items-center gap-2 mb-3"><span className="w-8 h-8 rounded-lg bg-slate-950 text-white font-serif font-black grid place-items-center">{k}</span><b className="text-sm">{t}</b></div><p className="text-slate-900 font-bold whitespace-pre-wrap leading-relaxed bg-slate-50 p-4 rounded-xl border min-h-[100px]">{selected.spin?.[k]||'（尚未填寫）'}</p></div>)}</div><div className="bg-slate-50 px-6 py-4 flex justify-between items-center border-t"><span className="text-xs text-slate-400">建議搭配大螢幕或投影機全螢幕展示</span><button onClick={()=>setSelected(null)} className="bg-slate-800 text-white text-xs font-bold py-2 px-5 rounded-lg">關閉投影</button></div></div></div>}
+
+  {deleteModal&&<div className="fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4"><div className="bg-white max-w-md w-full rounded-2xl shadow-2xl overflow-hidden"><div className="p-6 space-y-4"><div className="w-12 h-12 bg-red-50 text-red-600 rounded-full grid place-items-center mx-auto"><Icon name="alert" className="w-6 h-6"/></div><div className="text-center"><h3 className="text-lg font-black">{deleteModal.type==='all'?'確定要清空「所有」學員資料嗎？':`確定要刪除「${deleteModal.data?.studentName}」的資料？`}</h3><p className="text-slate-500 text-sm mt-2">此動作無法復原，請確認已匯出備份。</p></div></div><div className="bg-slate-50 px-6 py-4 flex gap-3 justify-end"><button onClick={()=>setDeleteModal(null)} className="px-4 py-2 bg-white text-sm font-bold rounded-xl border">取消</button><button onClick={deleteModal.type==='all'?removeAll:removeOne} className="px-4 py-2 bg-red-600 text-white text-sm font-bold rounded-xl">確認刪除</button></div></div></div>}
+
+  <footer className="bg-white border-t py-6 text-center text-xs text-slate-400"><div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between gap-2"><p>© 2026 SPIN 銷售演練平台. All rights reserved.</p><p>支援即時雲端儲存　•　一鍵投影演示功能</p></div></footer>
+ </div>
+}
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
